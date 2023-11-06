@@ -1,0 +1,14 @@
+Opencv
+Flask
+numpy
+tensorflow
+scikit-learn
+dlib
+face-recognition
+mtcnn
+keras
+requests
+openpyxl
+wheel
+tensorboard-data-saver
+tensorboard
