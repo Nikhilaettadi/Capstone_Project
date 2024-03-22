@@ -6,7 +6,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-image: url('http://www.exceptnothing.com/wp-content/uploads/2011/12/colorPulse_V4.jpg'); /* Set your background image URL here */
+            background-image: url('http://www.exceptnothing.com/wp-content/uploads/2011/12/colorPulse_V4.jpg');
             background-size: cover;
             background-repeat: no-repeat;
             background-attachment: fixed;
@@ -16,7 +16,7 @@
         .login-container {
             margin: 100px auto;
             width: 300px;
-            background-color: rgba(255, 255, 255, 0.8); /* Adjust the alpha value for transparency */
+            background-color: rgba(255, 255, 255, 0.8);
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
@@ -26,6 +26,14 @@
             width: 100%;
             padding: 10px;
             margin: 10px 0;
+        }
+
+        /* Adjust the width and height of the text boxes as desired */
+        input[type="text"],
+        input[type="password"] {
+            width: 80%; /* Reduce width to 80% of the container */
+            padding: 10px; /* Adjust padding */
+            box-sizing: border-box; /* Include padding in the width calculation */
         }
 
         button {
@@ -45,6 +53,7 @@
     <div class="login-container">
         <h2>Login</h2>
         <form method="post" action="{{ url_for('login') }}">
+            <!-- Apply the CSS styles to the input elements -->
             <input type="text" name="username" placeholder="Username" required><br>
             <input type="password" name="password" placeholder="Password" required><br>
             <button type="submit">Login</button>
