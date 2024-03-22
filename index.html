@@ -2,80 +2,284 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Face Recognition and Attendance</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition</title>
+
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-image: url('https://1.bp.blogspot.com/-jDL_K3XNvBQ/X0zdahWWmmI/AAAAAAAAAA8/LpJVzHblWPMaKDnVx3q9ZQA4Ln-hoJWLQCLcBGAsYHQ/s700/shutterstock_1367090597.jpg'); /* Replace 'your-image.jpg' with your image file */
+            margin: 20px;
+            text-align: center;
+            background-image: url('https://1.bp.blogspot.com/-jDL_K3XNvBQ/X0zdahWWmmI/AAAAAAAAAA8/LpJVzHblWPMaKDnVx3q9ZQA4Ln-hoJWLQCLcBGAsYHQ/s700/shutterstock_1367090597.jpg');
             background-size: cover;
             background-position: center;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
         }
 
         h1 {
-            text-align: center;
-            padding: 20px;
-            color: white;
-        }
-
-        #video-feed {
-            display: block;
-            margin: 0 auto;
-            border: 1px solid #ccc;
-        }
-
-        .button-container {
-            text-align: right; /* Align the buttons to the right side */
-            margin-top: 20px;
-            position: relative;
+            color: #ffffff;
         }
 
         button {
-            display: block;
-            padding: 10px 20px;
             background-color: #4CAF50;
             color: white;
-            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px;
             cursor: pointer;
-            margin: 5px;
         }
 
         button:hover {
             background-color: #45a049;
         }
+
+        #video-feed {
+            margin-top: 20px;
+            border: 2px solid #333;
+            border-radius: 8px;
+        }
+
+        /* Style the download Excel button */
+        #download-excel {
+            display: inline-block;
+            background-color: #007BFF;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 20px 0;
+            text-decoration: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        #download-excel:hover {
+            background-color: #0056b3;
+        }
+
+        /* Style the modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+
+        /* Style the modal content */
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+        }
+
+        /* Close button style */
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        /* Style for subjects and timings input fields */
+        label {
+            display: block;
+            margin-top: 10px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        /* Style the add subject button */
+        .add-subject-button {
+            background-color: #007BFF;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .add-subject-button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Style for subjects list */
+        #subjects-list {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        #subjects-list li {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
-    <img src="{{ url_for('video_feed') }}" id="video-feed" width="640" height="480">
-    <h1>Smart Attendance Management Using Face Recognition</h1>
-    <div class="button-container">
-        <button onclick="startVideo()">Start Video</button>
-        <button onclick="stopVideo()">Stop Video</button>
+    <h1>Smart Attendance System Using Face Recognition</h1>
+
+    <!-- Add button to start the video feed -->
+    <button onclick="startVideo()">Start Video Feed</button>
+    <!-- Add button to stop the video feed -->
+    <button onclick="stopVideo()">Stop Video Feed</button>
+
+    <!-- Download Excel button -->
+    <button id="download-excel" onclick="downloadExcel()">Attendance sheet</button>
+
+    <!-- Subjects button -->
+    <button id="subjects-button" onclick="openModal()">Subjects</button>
+
+    <!-- Video feed container -->
+    <div>
+        <img id="video-feed" width="640" height="480">
     </div>
-    <form method="post" action="{{ url_for('download_attendance') }}">
-        <button type="submit">Attendance Sheet</button>
-    </form>
+
+    <!-- Modal for subjects -->
+    <div id="subjects-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>Subjects and Timings</h2>
+            <ul id="subjects-list">
+                <!-- Initial subjects -->
+                <li>Subject 1: Monday 10:00 AM - 11:30 AM</li>
+                <li>Subject 2: Wednesday 2:00 PM - 3:30 PM</li>
+                <!-- Add more initial subjects as needed -->
+            </ul>
+            <!-- Button to add a new subject -->
+            <button class="add-subject-button" onclick="openAddSubjectModal()">Add Subject</button>
+
+            <!-- Modal for adding subjects -->
+            <div id="add-subject-modal" class="modal">
+                <div class="modal-content">
+                    <span class="close" onclick="closeAddSubjectModal()">&times;</span>
+                    <h2>Add New Subject</h2>
+                    <label for="subject-name">Subject Name:</label>
+                    <input type="text" id="subject-name" placeholder="Enter subject name">
+
+                    <label for="subject-timing">Subject Timing:</label>
+                    <input type="text" id="subject-timing" placeholder="Enter subject timing">
+
+                    <label for="subject-day">Subject Day:</label>
+                    <input type="text" id="subject-day" placeholder="Enter subject day">
+
+                    <button class="add-subject-button" onclick="saveSubject()">Save Subject</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // JavaScript function to start video capture
+        // Array to store subjects
+        var subjects = [
+            { name: 'DAFEML', timing: '9:30 AM - 10:20 AM', day: 'Monday' },
+            { name: 'DAA', timing: '10:30 AM - 11:20 AM', day: 'Monday' },
+            { name: 'JAVA', timing: '11:30 AM - 12:20 PM', day: 'Monday' }
+            // Add more initial subjects as needed
+        ];
+
         function startVideo() {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/start_video', true);
-            xhr.send();
+            document.getElementById('video-feed').src = '/video_feed';
         }
 
-        // JavaScript function to stop video capture
         function stopVideo() {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/stop_video', true);
-            xhr.send();
+            document.getElementById('video-feed').src = '';
         }
+
+        function downloadExcel() {
+            window.location.href = '/download_excel';
+        }
+
+        function openModal() {
+            displaySubjects();
+            document.getElementById('subjects-modal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('subjects-modal').style.display = 'none';
+        }
+
+        function openAddSubjectModal() {
+            document.getElementById('add-subject-modal').style.display = 'block';
+        }
+
+        function closeAddSubjectModal() {
+            document.getElementById('add-subject-modal').style.display = 'none';
+        }
+
+        function saveSubject() {
+            // Get values from input fields
+            var subjectName = document.getElementById('subject-name').value;
+            var subjectTiming = document.getElementById('subject-timing').value;
+            var subjectDay = document.getElementById('subject-day').value;
+
+            // Check if any field is empty
+            if (!subjectName || !subjectTiming || !subjectDay) {
+                alert("Please enter subject name, timing, and day.");
+                return;
+            }
+
+            // Save subject data to the array
+            subjects.push({
+                name: subjectName,
+                timing: subjectTiming,
+                day: subjectDay
+            });
+
+            // Display updated subjects in the modal
+            displaySubjects();
+
+            // Clear input fields
+            document.getElementById('subject-name').value = '';
+            document.getElementById('subject-timing').value = '';
+            document.getElementById('subject-day').value = '';
+
+            // Close the modal for adding subjects
+            closeAddSubjectModal();
+        }
+
+        function displaySubjects() {
+            // Display subjects in the modal
+            var subjectsList = document.getElementById('subjects-list');
+            subjectsList.innerHTML = '';
+
+            subjects.forEach(function (subject) {
+                var listItem = document.createElement('li');
+                listItem.textContent = `${subject.name} - ${subject.timing} (${subject.day})`;
+                subjectsList.appendChild(listItem);
+            });
+        }
+
+        // Close the modal if the user clicks outside the modal
+        window.onclick = function (event) {
+            var modal = document.getElementById('subjects-modal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
     </script>
 </body>
 </html>
