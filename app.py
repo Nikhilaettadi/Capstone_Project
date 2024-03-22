@@ -1,176 +1,184 @@
-from flask import Flask, render_template, Response, request, send_file, redirect, url_for, session
+from flask import Flask, render_template, Response
 import cv2
-import openpyxl
+import face_recognition
 import numpy as np
-import tensorflow as tf
-import datetime
-from mtcnn.mtcnn import MTCNN
+import os
+import json
+from datetime import datetime
+import pandas as pd
+from flask import send_file
+from flask import render_template, redirect, url_for, request
 
 app = Flask(__name__)
 
-app.secret_key = 'Nikhilaettadi'
+# Load the embeddings for all persons
+embeddings_folder = "embeddings"
+persons = os.listdir(embeddings_folder)
 
-# Define the name mapping dictionary
-name_mapping = {
-    0: "Nikhila",
-    1: "Ashritha",
-    2: "Aruna",
-    3: "Deekshitha",
-    4: "Ganesh"
-}
+# Initialize an empty dictionary to store embeddings
+all_embeddings = {}
 
-# Define the department mapping dictionary
-department_mapping = {
-    "Nikhila": "CSE",
-    "Ashritha": "CSE",
-    "Aruna": "CSE",
-    "Deekshitha": "CSE",
-    "Ganesh": "CSE",
-}
+# Load embeddings for all persons
+for person in persons:
+    person_folder = os.path.join(embeddings_folder, person)
+    embeddings_file_path = os.path.join(person_folder, f"{person}_embeddings.txt")
 
-# Load the pre-trained face recognition model (adjust this)
-model = tf.keras.models.load_model('my_face_recognition_model.h5')
+    if os.path.exists(embeddings_file_path):
+        embeddings = np.loadtxt(embeddings_file_path)
+        all_embeddings[person] = embeddings
+        print(f"Embeddings for {person} loaded successfully.")
+    else:
+        print(f"Embeddings file not found for {person} in {person_folder}. Please check the folder and file names.")
 
-# Load the names used in training, testing, and validation datasets
-training_names = ["Nikhila", "Ashritha", "Aruna", "Deekshitha", "Ganesh"]
-testing_names = ["Nikhila", "Ashritha", "Aruna", "Deekshitha", "Ganesh"]  # Add testing names if available
-validation_names = ["Nikhila", "Ashritha", "Aruna", "Deekshitha", "Ganesh"]  # Add validation names if available
+# Initialize the camera
+video_capture = cv2.VideoCapture(0)
 
-# Open an existing Excel workbook or create a new one
-workbook = openpyxl.load_workbook("attendance.xlsx")
-sheet = workbook.active
+# Load the attendance log from attendance.json
+attendance_file_path = "attendance.json"
+if not os.path.exists(attendance_file_path):
+    with open(attendance_file_path, "w") as f:
+        json.dump({}, f)
 
-# Clear existing data in the Excel sheet, including headers
-sheet.delete_rows(2, sheet.max_row - 1)
+# Initialize attendance_log as an empty dictionary
+attendance_log = {}
 
-# Add headers for the "Name," "Day," "Time," "Department," and "Status" columns
-sheet.cell(row=1, column=1, value="Name")
-sheet.cell(row=1, column=2, value="Day")
-sheet.cell(row=1, column=3, value="Time")
-sheet.cell(row=1, column=4, value="Department")
-sheet.cell(row=1, column=5, value="Status")
+# Create global variables for accuracy calculation
+total_faces = 0
+correctly_recognized_faces = 0
 
-# Create a set to keep track of recognized names in the current session
 recognized_names = set()
-recognized_names_in_session = set()
+recognized_faces = []  # List to store recognized faces with timestamps
 
-# Set a confidence threshold for recognizing known faces
-confidence_threshold = 0.7
+video_processing = True
 
-# Initialize the video capture (initially stopped)
-video_capture = None
+def gen_frames():
+    global total_faces, correctly_recognized_faces, video_processing, video_capture  # Declare these as global
 
-# Initialize MTCNN for face detection
-detector = MTCNN()
+    while True:
+        if video_processing:
+            success, frame = video_capture.read()
+            if not success:
+                break
 
-# Global variable to stop video capture
-stop_video_capture = False
+            face_locations = face_recognition.face_locations(frame)
+            face_encodings = face_recognition.face_encodings(frame, face_locations)
 
-# A simple user database (you can replace this with your own user management system)
-users = {
-    'Nikhila' : 'sru123'
-}
-# Define a route for the login page
+            #print(f"Number of faces detected: {len(face_locations)}")
+
+            for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+                total_faces += 1
+                recognized = False
+
+                # Check if the face matches any person
+                for person, embeddings in all_embeddings.items():
+                    face_distances = face_recognition.face_distance(embeddings, face_encoding)
+                    best_match_index = np.argmin(face_distances)
+
+                    #print(f"Face distance for {person}: {face_distances[best_match_index]}")
+
+                    if face_distances[best_match_index] < 0.45:  # Adjust the threshold if needed
+                        recognized = True
+                        name = person
+
+                        print(f"Recognized {name}")
+
+                        # Check if the recognized person is in the ground truth dataset
+                        image_path = os.path.join("dataset", name, f"{name}_image_{total_faces}.jpg")
+                        if os.path.exists(image_path):
+                            correctly_recognized_faces += 1
+
+                            # Mark attendance
+                            if name not in attendance_log:
+                                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                attendance_log[name] = timestamp
+
+                                # Store recognized face information
+                                recognized_faces.append({"Name": name, "Timestamp": timestamp})
+
+                                # Write the updated attendance log to the JSON file
+                                try:
+                                    with open(attendance_file_path, "w") as f:
+                                        json.dump(attendance_log, f)
+                                except Exception as e:
+                                    print(f"Error writing to JSON file: {e}")
+
+                            # Draw rectangle and name on the frame
+                            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+                            cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+                        # Break after recognizing a face to avoid assigning multiple names to the same face
+                        break
+
+                # Display "Unknown" if the face is not recognized
+                if not recognized:
+                    print("Face not recognized")
+                    cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+                    cv2.putText(frame, "Unknown", (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame = buffer.tobytes()
+            yield (b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')  # concat frame one by one and show result
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        if users.get(username) == password:
-            # If the login is successful, set a session variable and then redirect to the main page
-            session['logged_in'] = True  # You need to import 'session' from 'flask'
-            return redirect(url_for('index'))
-        else:
-            # If login fails, display an error message or redirect to the login page again
-            return "Login failed. Please try again"
+        # Check login credentials (replace this with your authentication logic)
+        username = request.form.get('username')
+        password = request.form.get('password')
 
+        # Example: Check if username and password match
+        if username == 'Nikhila' and password == 'sru123':
+            # Redirect to the main page on successful login
+            return redirect(url_for('index'))
+
+        # Redirect back to the login page on failed login
+        return redirect(url_for('login'))
+
+    # Render the login page for GET requests
     return render_template('login.html')
 
 @app.route('/')
 def index():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))  # Redirect to the login page if not logged in
+    # Check if the user is authenticated (replace this with your authentication logic)
+    authenticated = True  # Replace this with your actual authentication check
+
+    if not authenticated:
+        # Redirect to the login page if not authenticated
+        return redirect(url_for('login'))
+
+    # Render the main page for authenticated users
     return render_template('index.html')
-
-def generate_frames():
-    while True:
-        if stop_video_capture:
-            break  # Exit the loop
-
-        if video_capture is not None:
-            ret, img = video_capture.read()
-
-            # Detect faces using MTCNN
-            faces = detector.detect_faces(img)
-
-            for result in faces:
-                x, y, w, h = result['box']
-                x, y, w, h = int(x), int(y), int(w), int(h)  # Ensure integer values
-                detected_face = img[y:y + h, x:x + w]
-
-                # Preprocess the detected face
-                face = cv2.resize(detected_face, (128, 128))
-                face = face.astype(np.float32) / 255.0
-
-                # Perform face recognition
-                face = np.expand_dims(face, axis=0)
-                prediction = model.predict(face)
-                max_confidence = np.max(prediction)
-                recognized_label = np.argmax(prediction)
-
-                if max_confidence < confidence_threshold:
-                    predicted_name = "Unknown"
-                    department = "N/A"
-                    status = "Absent"
-                else:
-                    predicted_name = name_mapping.get(recognized_label, "Unknown")
-                    department = department_mapping.get(predicted_name, "N/A")
-                    status = "Present"
-
-                if predicted_name != "Unknown" and predicted_name not in recognized_names_in_session:
-                    # Add the name, day, time, department, and status to the Excel sheet at the beginning
-                    day = datetime.datetime.now().strftime("%Y-%m-%d")
-                    time = datetime.datetime.now().strftime("%H:%M:%S")
-                    new_row = [predicted_name, day, time, department, status]
-                    sheet.insert_rows(2)  # Insert a new row at the beginning
-                    for idx, value in enumerate(new_row, start=1):
-                        sheet.cell(row=2, column=idx, value=value)  # Set values for each cell in the new row
-                    recognized_names_in_session.add(predicted_name)
-
-                ret, buffer = cv2.imencode('.jpg', img)
-                frame = buffer.tobytes()
-                yield (b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-
-@app.route('/video_feed')
-def video_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/start_video')
 def start_video():
-    global video_capture
-    video_capture = cv2.VideoCapture(0)  # Start video capture
+    global video_processing
+    video_processing = True
     return 'Video started'
 
 @app.route('/stop_video')
 def stop_video():
-    global stop_video_capture, video_capture
-    stop_video_capture = True
-    if video_capture is not None:
-        video_capture.release()
-    cv2.destroyAllWindows()
+    global video_processing
+    video_processing = False
     return 'Video stopped'
 
-# Route for downloading the updated Excel sheet
-@app.route('/download_attendance', methods=['GET', 'POST'])
-def download_attendance():
-    if request.method == 'POST':
-        try:
-            workbook.save("attendance.xlsx")  # Save the updated workbook
-            return send_file("attendance.xlsx", as_attachment=True, download_name="attendance.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except Exception as e:
-            return f'Error: {str(e)}'
-    return render_template('index.html')
+@app.route('/video_feed')
+def video_feed():
+    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-if __name__ == '__main':
+@app.route('/download_excel')
+def download_excel():
+    global recognized_faces
+
+    # Convert the recognized faces list to a DataFrame
+    df_recognized_faces = pd.DataFrame(recognized_faces)
+
+    # Save the DataFrame to an Excel file
+    excel_file_path = "recognized_faces.xlsx"
+    df_recognized_faces.to_excel(excel_file_path, index=False)
+
+    # Send the file as an attachment with the appropriate MIME type
+    return send_file(excel_file_path, as_attachment=True, download_name='recognized_faces.xlsx')
+
+if __name__ == '__main__':
     app.run(debug=True)
